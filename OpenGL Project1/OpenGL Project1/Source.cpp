@@ -321,7 +321,6 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 		}
 		if (key == GLFW_KEY_KP_ADD && d < 9.0f) {
 			d += 1.0f;
-			cout << "novel" << endl;
 		}
 		if (key == GLFW_KEY_KP_SUBTRACT && d > 3.0f) {
 			d -= 1.0f;
