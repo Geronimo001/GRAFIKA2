@@ -19,11 +19,14 @@ GLchar windowTitle[] = "Beadando 2 - Szabo Gyula Mark";
 GLuint windowWidth = 800;
 GLuint windowHeight = 800;
 GLFWwindow* window = nullptr;
+//ÁTMÉRŐ
 GLfloat d = 7.0f;
 
+//PONT MOZGATÁSA
 GLint dragged = -1;
 
-std::vector<glm::vec3> pointToDraw;
+//PONTOK RAJZOLÁSA
+std::vector<glm::vec3> bezier;
 std::vector<glm::vec3> myControlPoints;
 
 GLuint VAO[numVAOs];
@@ -136,7 +139,6 @@ GLuint createShaderProgram(const char* vertexShader, const char* fragmentShader)
 	return vfProgram;
 }
 
-
 /* Kiszámoljuk két pont távolságát. */
 GLfloat dist2(glm::vec3 P1, glm::vec3 P2)
 {
@@ -161,7 +163,6 @@ GLint getActivePoint(const std::vector<glm::vec3>& points, int size, float sens,
 	return -1;
 }
 
-
 /* Binomiális együttható. */
 int NCR(int n, int r) {
 	if (r > n - r) r = n - r;  // Kihasználjuk a szimmetriát: C(n, r) = C(n, n-r)
@@ -175,7 +176,6 @@ int NCR(int n, int r) {
 	return result;
 }
 
-
 /* Bezier görbe egyenlete. */
 double blending(int i, float t, int n) {
 	return NCR(n, i) * pow(1 - t, n - i) * pow(t, i);
@@ -184,7 +184,7 @@ double blending(int i, float t, int n) {
 /* A görbe pontok koordinátái */
 void drawBezierCurve(const std::vector<glm::vec3>& controlPoints)
 {
-	pointToDraw.clear();
+	bezier.clear();
 	glm::vec3 nextPoint;
 	GLfloat t = 0.0f;
 	GLfloat increment = 1.0f / 100.0f;
@@ -198,10 +198,27 @@ void drawBezierCurve(const std::vector<glm::vec3>& controlPoints)
 			nextPoint += (float)blending(i, t, n) * controlPoints[i];
 		}
 
-		pointToDraw.push_back(nextPoint);
+		bezier.push_back(nextPoint);
 
 		t += increment;
 	}
+}
+
+void draw() {
+	if (myControlPoints.size() >= 3)
+	{
+		drawBezierCurve(myControlPoints);
+	}
+	else {
+		bezier.clear();
+	}
+
+	glBindBuffer(GL_ARRAY_BUFFER, VBO[0]);
+	glBufferData(GL_ARRAY_BUFFER, bezier.size() * sizeof(glm::vec3), bezier.data(), GL_STATIC_DRAW);
+
+	glBindBuffer(GL_ARRAY_BUFFER, VBO[1]);
+	glBufferData(GL_ARRAY_BUFFER, myControlPoints.size() * sizeof(glm::vec3), myControlPoints.data(), GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 /* Ha a drag drop technikával megfogjuk a pontok, és arrébb visszük, akkor újra kell számolni a görbe pontjait. */
@@ -217,19 +234,7 @@ void cursorPosCallback(GLFWwindow* window, double xPos, double yPos)
 		myControlPoints.at(dragged).x = xNorm;
 		myControlPoints.at(dragged).y = yNorm;
 
-		if (myControlPoints.size() >= 3)
-		{
-			pointToDraw.clear();
-			drawBezierCurve(myControlPoints);
-		}
-
-		glBindBuffer(GL_ARRAY_BUFFER, VBO[0]);
-		glBufferData(GL_ARRAY_BUFFER, pointToDraw.size() * sizeof(glm::vec3), pointToDraw.data(), GL_STATIC_DRAW);
-
-		glBindBuffer(GL_ARRAY_BUFFER, VBO[1]);
-		glBufferData(GL_ARRAY_BUFFER, myControlPoints.size() * sizeof(glm::vec3), myControlPoints.data(), GL_STATIC_DRAW);
-
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		draw();
 	}
 }
 
@@ -247,8 +252,7 @@ void cleanUpScene() {
 	exit(EXIT_SUCCESS);
 }
 
-/* Amikor kattintunk, ugye új pontot hozunk létre. Vagy ha meglévő pontra kattintunk, akkor azt "megfogjuk". Jobb egérgombbal pedig az utolsó
-pontot töröljük. */
+/* Bal kattintás: pont letétel, bal kattintás és mozgatás: pont mozgatás, jobb kattintás ponton: pont levétele */
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
 	GLint i;
@@ -261,49 +265,17 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 		}
 		else
 		{
-			myControlPoints.push_back(glm::vec3(x / (windowWidth / 2) - 1.0f,
-				(windowWidth - y) / (windowHeight / 2) - 1.0f,
-				0.0f));
-
-
-			if (myControlPoints.size() >= 3)
-			{
-				drawBezierCurve(myControlPoints);
-			}
-			else {
-				pointToDraw.clear();
-			}
-
-			glBindBuffer(GL_ARRAY_BUFFER, VBO[0]);
-			glBufferData(GL_ARRAY_BUFFER, pointToDraw.size() * sizeof(glm::vec3), pointToDraw.data(), GL_STATIC_DRAW);
-
-			glBindBuffer(GL_ARRAY_BUFFER, VBO[1]);
-			glBufferData(GL_ARRAY_BUFFER, myControlPoints.size() * sizeof(glm::vec3), myControlPoints.data(), GL_STATIC_DRAW);
-			glBindBuffer(GL_ARRAY_BUFFER, 0);
+			myControlPoints.push_back(glm::vec3(x / (windowWidth / 2) - 1.0f, (windowWidth - y) / (windowHeight / 2) - 1.0f, 0.0f));
+			draw();
 		}
 	}
 	if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
 		int idx = getActivePoint(myControlPoints, myControlPoints.size(), SENSITIVITY, x, windowHeight - y);
 		if (idx != -1) {
 			// Töröljük a pontot
-			myControlPoints.erase(myControlPoints.begin() + idx); // csak egy pontot törlünk
+			myControlPoints.erase(myControlPoints.begin() + idx);
 		}
-
-		if (myControlPoints.size() >= 3)
-		{
-			drawBezierCurve(myControlPoints);
-		}
-		else {
-			pointToDraw.clear();
-		}
-
-		glBindBuffer(GL_ARRAY_BUFFER, VBO[0]);
-		glBufferData(GL_ARRAY_BUFFER, pointToDraw.size() * sizeof(glm::vec3), pointToDraw.data(), GL_STATIC_DRAW);
-
-		glBindBuffer(GL_ARRAY_BUFFER, VBO[1]);
-		glBufferData(GL_ARRAY_BUFFER, myControlPoints.size() * sizeof(glm::vec3), myControlPoints.data(), GL_STATIC_DRAW);
-
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		draw();
 	}
 
 
@@ -312,6 +284,7 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 	}
 }
 
+// Billentyűk használata
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
 	if (action == GLFW_PRESS || action == GLFW_REPEAT) {
 		// ESC-el bezárom az ablakot
@@ -319,9 +292,11 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 		{
 			cleanUpScene();
 		}
+		//NUMPAD +
 		if (key == GLFW_KEY_KP_ADD && d < 9.0f) {
 			d += 1.0f;
 		}
+		//NUMPAD -
 		if (key == GLFW_KEY_KP_SUBTRACT && d > 3.0f) {
 			d -= 1.0f;
 		}
@@ -342,7 +317,7 @@ void init(GLFWwindow* window) {
 
 	glBindVertexArray(VAO[0]);
 	glBindBuffer(GL_ARRAY_BUFFER, VBO[0]);
-	glBufferData(GL_ARRAY_BUFFER, pointToDraw.size() * sizeof(glm::vec3), pointToDraw.data(), GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, bezier.size() * sizeof(glm::vec3), bezier.data(), GL_STATIC_DRAW);
 
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 	glEnableVertexAttribArray(0);
@@ -358,27 +333,27 @@ void init(GLFWwindow* window) {
 	// Tisztítás
 	glBindVertexArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glClearColor(GLclampf(0.0f / 255.0f), GLclampf(0.0f / 255.0f), GLclampf(139.0f / 255.0f), 1.0);
 }
 
 void display(GLFWwindow* window, double currentTime) {
-	glClearColor(0.0, 0.0, 0.0, 1.0);
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	GLint drawModeLoc = glGetUniformLocation(renderingProgram, "drawMode");
 
-	// Görbe
 	glUseProgram(renderingProgram);
+
+	// Bezier
 	glUniform1i(drawModeLoc, 0);
 	glBindVertexArray(VAO[0]);
-	glLineWidth(5.0f);
-	glDrawArrays(GL_LINE_STRIP, 0, pointToDraw.size());
+	glLineWidth(d);
+	glDrawArrays(GL_LINE_STRIP, 0, bezier.size());
 
 	// Kontrollpoligon
 	glUniform1i(drawModeLoc, 1);
 	glBindVertexArray(VAO[1]);
-	glLineWidth(5.0f);
+	glLineWidth(d);
 	glDrawArrays(GL_LINE_STRIP, 0, myControlPoints.size());
-
 
 	// Kontrollpontok
 	glUniform1i(drawModeLoc, 2);
@@ -406,7 +381,7 @@ int main(void) {
 	if (glewInit() != GLEW_OK) { exit(EXIT_FAILURE); }
 	glfwSwapInterval(1);
 
-	
+
 
 	// Írkálás
 	cout << "Beadando 02." << endl;
